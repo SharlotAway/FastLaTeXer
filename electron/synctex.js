@@ -1,5 +1,7 @@
 // SyncTeX forward / inverse mapping via the TeX Live `synctex` CLI.
 const { findTool, runProcess } = require('./tex-tools');
+const path = require('node:path');
+const { existsSync } = require('node:fs');
 
 async function synctexForward({ pdfPath, line, column, inputFile }) {
   const tool = findTool('synctex');
@@ -15,18 +17,22 @@ async function synctexForward({ pdfPath, line, column, inputFile }) {
   return { page, x, y };
 }
 
-async function synctexInverse({ pdfPath, page, x, y }) {
+async function synctexInverse({ pdfPath, page, x, y, rootDir, mainFile }) {
   const tool = findTool('synctex');
   // Correct CLI form: `synctex edit -o page:x:y:file`
-  const res = await runProcess(tool, ['edit', '-o', `${page}:${x}:${y}:${pdfPath}`], { timeout: 20000 });
+  const res = await runProcess(tool, ['edit', '-o', `${page}:${x}:${y}:${pdfPath}`], { cwd: rootDir || undefined, timeout: 20000 });
   if (res.code !== 0) return null;
   const out = (res.stdout || '') + '\n' + (res.stderr || '');
   let line = parseInt((out.match(/Line:\s*(\d+)/i) || [])[1], 10);
   let column = parseInt((out.match(/Column:\s*(\d+)/i) || [])[1], 10);
   if (isNaN(line)) line = 0;
   if (isNaN(column)) column = 0;
-  const im = out.match(/Input:\s*([^\r\n]+)/i);
-  return { line, column, file: im ? im[1].trim() : null };
+  const input = out.match(/^Input:[ \t]*([^\r\n]+)/im)?.[1].trim();
+  if (!input || !line) return null;
+  const pdfDir = path.dirname(pdfPath);
+  const sourceDir = mainFile ? path.dirname(mainFile) : rootDir || pdfDir;
+  const candidates = [sourceDir, rootDir || pdfDir, pdfDir].map((dir) => path.resolve(dir, input));
+  return { line, column, file: candidates.find((candidate) => existsSync(candidate)) ?? candidates[0] };
 }
 
 module.exports = { synctexForward, synctexInverse };

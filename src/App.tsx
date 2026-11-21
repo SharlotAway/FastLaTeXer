@@ -18,6 +18,17 @@ import { FileOutline, filesIn, GitHistory, Panel, ProjectSearch, Settings, Workb
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const workspaceKey = 'fastlatexer-workspace';
 const themeKey = 'fastlatexer-theme';
+const imageMimeTypes: Readonly<Record<string, string>> = {
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', jfif: 'image/jpeg',
+  gif: 'image/gif', svg: 'image/svg+xml', webp: 'image/webp', bmp: 'image/bmp',
+  avif: 'image/avif', ico: 'image/x-icon', apng: 'image/apng',
+};
+
+function previewMimeType(file: string) {
+  const extension = file.match(/\.([a-z0-9]+)$/i)?.[1].toLowerCase();
+  if (extension === 'pdf') return 'application/pdf';
+  return extension && Object.hasOwn(imageMimeTypes, extension) ? imageMimeTypes[extension] : undefined;
+}
 
 const samePath = (a: string | null, b: string) =>
   a?.replace(/\\/g, '/').toLowerCase() === b.replace(/\\/g, '/').toLowerCase();
@@ -129,8 +140,15 @@ export default function App() {
   const [sourceJump, setSourceJump] = useState<{ file: string; line: number; column: number } | null>(null);
   const [dropRow, setDropRow] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
-  const [panel, setPanel] = useState<{ kind: 'search' | 'settings' | 'history' | 'words' | 'symbol' | 'project' | 'url' | 'image'; path?: string } | null>(null);
-  const [imagePreview, setImagePreview] = useState<{ url: string; name: string } | null>(null);
+  const [panel, setPanel] = useState<{ kind: 'search' | 'settings' | 'history' | 'words' | 'symbol' | 'project' | 'url'; path?: string } | null>(null);
+  const [assetPreview, setAssetPreview] = useState<
+    { kind: 'image'; path: string; url: string } | { kind: 'pdf'; path: string; bytes: ArrayBuffer } | null
+  >(null);
+  const assetRequest = useRef(0);
+  const displayedPdf = assetPreview ? (assetPreview.kind === 'pdf' ? assetPreview : null) : preview;
+  const currentDisplayedPdf = useRef(displayedPdf);
+  currentDisplayedPdf.current = displayedPdf;
+  const inverseRequest = useRef(0);
   const [imageValue, setImageValue] = useState('');
   const [imageLoading, setImageLoading] = useState(false);
   const [imageError, setImageError] = useState('');
@@ -189,7 +207,8 @@ export default function App() {
     }).catch(console.error);
     return () => { active = false; unsubscribe?.(); };
   }, []);
-  useEffect(() => () => { if (imagePreview) URL.revokeObjectURL(imagePreview.url); }, [imagePreview]);
+  const imageUrl = assetPreview?.kind === 'image' ? assetPreview.url : undefined;
+  useEffect(() => () => { if (imageUrl) URL.revokeObjectURL(imageUrl); }, [imageUrl]);
   useEffect(() => {
     if (!context) return;
     const close = (event: PointerEvent) => {
@@ -315,15 +334,37 @@ export default function App() {
     [],
   );
 
+  const closeAssetPreview = useCallback(() => {
+    assetRequest.current++;
+    setAssetPreview(null);
+  }, []);
+
+  const openAssetPreview = useCallback(async (path: string, mime: string) => {
+    const request = ++assetRequest.current;
+    try {
+      const bytes = await window.api.readBinary(path);
+      if (request !== assetRequest.current) return;
+      forwardRequest.current++;
+      setAssetPreview(mime === 'application/pdf'
+        ? { kind: 'pdf', path, bytes }
+        : { kind: 'image', path, url: URL.createObjectURL(new Blob([bytes], { type: mime })) });
+      setRightWidth((width) => width < 100 ? 320 : width);
+    } catch (error) {
+      if (request === assetRequest.current) reportError(error);
+    }
+  }, [reportError]);
+
   const openNode = useCallback(
     async (node: TreeNode) => {
-      if (!node.editable) {
-        window.api.revealInFolder(node.path);
-        return;
+      const mime = previewMimeType(node.path);
+      if (mime) {
+        await openAssetPreview(node.path, mime);
+      } else if (node.editable) {
+        closeAssetPreview();
+        await openFileByPath(node.path);
       }
-      await openFileByPath(node.path);
     },
-    [openFileByPath],
+    [closeAssetPreview, openAssetPreview, openFileByPath],
   );
 
   const applyProject = useCallback((res: { root: string; tree: TreeNode[] } | null) => {
@@ -342,12 +383,13 @@ export default function App() {
       setFileConflict(null);
       setLastResult(null);
       setPreview(null);
+    closeAssetPreview();
       setMainFile(null);
       setSourceJump(null);
       setShowProblems(false);
       setNotice('');
       setEntryRequest(undefined);
-  }, []);
+  }, [closeAssetPreview]);
 
   const rememberProject = useCallback((project: string) => {
     const items = readWorkspace();
@@ -418,17 +460,17 @@ export default function App() {
   }, [content, currentFile, mainFile, refreshTree, reportError, t]);
 
   const exportPdf = useCallback(async () => {
-    if (!preview) {
-      setNotice(t('请先编译生成 PDF。', 'Compile to generate a PDF first.'));
+    if (!displayedPdf) {
+      setNotice(t('请先打开或编译生成 PDF。', 'Open or compile a PDF first.'));
       return;
     }
     try {
-      const target = await window.api.exportPdf(preview.pdfPath, preview.bytes);
+      const target = await window.api.exportPdf('pdfPath' in displayedPdf ? displayedPdf.pdfPath : displayedPdf.path, displayedPdf.bytes);
       if (target) setNotice(t(`已导出 ${basename(target)}`, `Exported ${basename(target)}`));
     } catch (error) {
       reportError(error);
     }
-  }, [preview, reportError, t]);
+  }, [displayedPdf, reportError, t]);
 
   const createEntry = async (directory: string, name: string, kind: EntryKind) => {
     if (!root) return false;
@@ -483,7 +525,7 @@ export default function App() {
   }, []);
 
   const syncToPdf = useCallback(async (line: number, column: number) => {
-    if (!preview) return;
+    if (!preview || assetPreview) return;
     const file = currentFileRef.current;
     if (!file || !/\.(?:tex|ltx)$/i.test(file)) return;
     const request = ++forwardRequest.current;
@@ -504,7 +546,7 @@ export default function App() {
       setRightWidth(width);
     }
     previewRef.current?.jumpTo(result.page, result.x, result.y, target.image);
-  }, [preview]);
+  }, [preview, assetPreview]);
 
   const doSync = useCallback(() => {
     const pos = editorRef.current?.getPosition();
@@ -512,15 +554,22 @@ export default function App() {
   }, [reportError, syncToPdf]);
 
   const handlePdfDoubleClick = useCallback(
-    async (page: number, x: number, y: number) => {
+    async (page: number, x: number, y: number, image?: { x: number; y: number }) => {
       const project = rootRef.current;
-      if (!project || !preview) return;
-      const r = await window.api.synctexInverse({ pdfPath: preview.pdfPath, page, x, y });
-      if (!r?.file || r.line < 1 || rootRef.current !== project) return;
-      const file = resolveAgainst(preview.mainFile, r.file);
-      const current = currentFileRef.current;
-      const sameFile = current && resolveAgainst('', current).toLowerCase() === file.toLowerCase();
-      if (!sameFile && !(await openFileByPath(file))) return;
+      if (!project || !displayedPdf || currentDisplayedPdf.current !== displayedPdf) return;
+      const request = ++inverseRequest.current;
+      const pdfPath = 'pdfPath' in displayedPdf ? displayedPdf.pdfPath : displayedPdf.path;
+      const isCurrent = () => request === inverseRequest.current &&
+        currentDisplayedPdf.current === displayedPdf && rootRef.current === project;
+      const mainFile = 'mainFile' in displayedPdf ? displayedPdf.mainFile : undefined;
+      const r = await window.api.synctexInverse({ pdfPath, mainFile, page, x: image?.x ?? x, y: image?.y ?? y });
+      if (!isCurrent()) return;
+      if (!r?.file || r.line < 1) {
+        setNotice(t('此位置没有可用的 SyncTeX 源码映射。', 'No SyncTeX source mapping is available at this position.'));
+        return;
+      }
+      if (!(await openFileByPath(r.file)) || !isCurrent()) return;
+      const source = image ? forwardSyncTarget(contentRef.current, r.line).source : undefined;
 
       const editorWidth = editorPaneRef.current?.getBoundingClientRect().width ?? 0;
       const previewWidth = previewPaneRef.current?.getBoundingClientRect().width ?? 0;
@@ -528,9 +577,13 @@ export default function App() {
         // Make space for the source while keeping the clicked PDF visible.
         setRightWidth(previewWidth - Math.min(280 - editorWidth, previewWidth / 2));
       }
-      setSourceJump({ file: sameFile ? current : file, line: r.line, column: r.column || 1 });
+      setSourceJump({
+        file: currentFileRef.current ?? r.file,
+        line: source?.line ?? r.line,
+        column: source?.column ?? Math.max(1, r.column),
+      });
     },
-    [preview, openFileByPath],
+    [displayedPdf, openFileByPath, t],
   );
 
   useEffect(() => {
@@ -666,17 +719,6 @@ export default function App() {
     setSourceJump({ file, line, column });
   }
 
-  async function openImage(path: string) {
-    try {
-      const ext = path.split('.').pop()?.toLowerCase() ?? '';
-      const mime = ({ png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', svg: 'image/svg+xml', webp: 'image/webp', bmp: 'image/bmp' } as Record<string, string>)[ext];
-      if (!mime) return;
-      const bytes = await window.api.readBinary(path);
-      setImagePreview({ url: URL.createObjectURL(new Blob([bytes], { type: mime })), name: basename(path) });
-      showPanel('image');
-    } catch (error) { reportError(error); }
-  }
-
   async function removeWorkspace() {
     if (!root || openingProject.current) return;
     try {
@@ -700,7 +742,7 @@ export default function App() {
     });
   }
 
-  function closePanel() { setPanel(null); setImagePreview(null); }
+  function closePanel() { setPanel(null); }
   const contextFilePath = root && context && context.path !== context.directory ? projectRelativePath(root, context.path) : null;
   const searchFolder = panel?.kind === 'search' ? panel.path : undefined;
   const eligibleImages = allFiles.filter((node) => /\.(?:png|jpe?g|pdf)$/i.test(node.path));
@@ -859,7 +901,7 @@ export default function App() {
         onSave={() => void saveCurrent().catch(reportError)}
         onCompile={() => void runCompile().catch(reportError)}
         onSync={doSync}
-        canSync={!!preview}
+        canSync={!!preview && !assetPreview}
       >
         <WorkbenchMenus editor={!!currentFile} project={!!root} onInsert={editInsert} onFormat={editFormat}
           onSearch={() => showPanel('search')} onSettings={() => showPanel('settings')} onHistory={() => showPanel('history')} />
@@ -882,7 +924,7 @@ export default function App() {
             </select>
             <button className="pane-btn" title={t('将文件夹添加到工作区', 'Add Folder to Workspace')} onClick={addWorkspaceFolder}>+</button>
           </div>}
-          <FileTree key={root} root={root} nodes={tree} currentFile={currentFile} onOpen={openNode} onCreate={createEntry} dropRow={dropRow} request={entryRequest} />
+          <FileTree key={root} root={root} nodes={tree} currentFile={assetPreview?.path ?? currentFile} onOpen={openNode} onCreate={createEntry} dropRow={dropRow} request={entryRequest} />
           <FileOutline content={content} hasFile={!!currentFile} onJump={(line, column) => {
             if (currentFile) void jumpToSource(currentFile, line, column);
           }} />
@@ -932,14 +974,20 @@ export default function App() {
 
         <div className="pane pane-preview" ref={previewPaneRef}>
           <div className="pane-title pane-actions">
-            <span>{t('预览', 'Preview')}</span>
-            <button className="pane-btn zoom-btn" title={t('缩小 (Ctrl + 滚轮)', 'Zoom out (Ctrl + Wheel)')} aria-label={t('缩小预览', 'Zoom out')} disabled={!preview}
+            <span>{assetPreview ? basename(assetPreview.path) : t('预览', 'Preview')}</span>
+            {assetPreview && <button className="pane-btn" onClick={closeAssetPreview}>{t('关闭文件预览', 'Close file preview')}</button>}
+            <button className="pane-btn zoom-btn" title={t('缩小 (Ctrl + 滚轮)', 'Zoom out (Ctrl + Wheel)')} aria-label={t('缩小预览', 'Zoom out')} disabled={!displayedPdf}
               onClick={() => previewRef.current?.zoomOut()}><span className="magnifier" aria-hidden="true">−</span></button>
-            <button className="pane-btn zoom-btn" title={t('放大 (Ctrl + 滚轮)', 'Zoom in (Ctrl + Wheel)')} aria-label={t('放大预览', 'Zoom in')} disabled={!preview}
+            <button className="pane-btn zoom-btn" title={t('放大 (Ctrl + 滚轮)', 'Zoom in (Ctrl + Wheel)')} aria-label={t('放大预览', 'Zoom in')} disabled={!displayedPdf}
               onClick={() => previewRef.current?.zoomIn()}><span className="magnifier" aria-hidden="true">+</span></button>
-            <button className="pane-btn" disabled={!preview} onClick={exportPdf}>{t('导出 PDF', 'Export PDF')}</button>
+            <button className="pane-btn" disabled={!displayedPdf} onClick={exportPdf}>{t('导出 PDF', 'Export PDF')}</button>
           </div>
-          <PreviewPane ref={previewRef} pdfBytes={preview?.bytes ?? null} onDoubleClick={handlePdfDoubleClick} />
+          {assetPreview?.kind === 'image'
+            ? <div className="preview preview-image"><img src={assetPreview.url} alt={basename(assetPreview.path)}
+                onError={() => setNotice(t('无法显示此图片。', 'Unable to display this image.'))} /></div>
+            : <PreviewPane ref={previewRef} pdfBytes={displayedPdf?.bytes ?? null} onDoubleClick={(page, x, y, image) => {
+                void handlePdfDoubleClick(page, x, y, image).catch(reportError);
+              }} />}
         </div>
       </div>
 
@@ -988,8 +1036,10 @@ export default function App() {
             setNotice(t(`已复制 ${contextFilePath}`, `Copied ${contextFilePath}`));
           }).catch(reportError);
         }}>{t('复制文件相对路径', 'Copy Relative File Path')}</button>}
-        <button disabled={!/\.(?:png|jpe?g|gif|svg|webp|bmp)$/i.test(context.path)}
-          onClick={() => void openImage(context.path)}>{t('在图像预览中打开', 'Open in Image Preview')}</button>
+        <button disabled={!contextFilePath || !previewMimeType(context.path)} onClick={() => {
+          const mime = previewMimeType(context.path);
+          if (mime) void openAssetPreview(context.path, mime);
+        }}>{t('在预览中打开', 'Open in Preview')}</button>
         <hr />
         <button onClick={addWorkspaceFolder}>{t('将文件夹添加到工作区…', 'Add Folder to Workspace…')}</button>
         <button onClick={() => showPanel('settings', context.directory)}>{t('打开文件夹设置', 'Open Folder Settings')}</button>
@@ -1018,9 +1068,6 @@ export default function App() {
           <div><dt>{t('字符数', 'Characters')}</dt><dd>{wordCount.characters}</dd></div>
           <div><dt>{t('行数', 'Lines')}</dt><dd>{wordCount.lines}</dd></div>
         </dl>
-      </Panel>}
-      {panel?.kind === 'image' && imagePreview && <Panel title={imagePreview.name} onClose={closePanel}>
-        <img className="asset-preview" src={imagePreview.url} alt={imagePreview.name} />
       </Panel>}
       {panel?.kind === 'symbol' && <Panel title={t('插入符号', 'Insert Symbol')} onClose={closePanel}>
         <div className="symbol-grid">

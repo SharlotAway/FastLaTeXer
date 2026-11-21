@@ -31,14 +31,14 @@ interface PdfPageData {
 type Matrix = [number, number, number, number, number, number];
 type PdfLink = { id: string; rect: number[]; url?: string; dest?: string | unknown[] };
 
-async function matchingImage(page: pdfjs.PDFPageProxy, x: number, y: number) {
+async function matchingImage(page: pdfjs.PDFPageProxy, x: number, y: number, tolerance = 18) {
   const { fnArray, argsArray } = await page.getOperatorList();
   const viewport = page.getViewport({ scale: 1 });
   const identity: Matrix = [1, 0, 0, 1, 0, 0];
   let matrix = identity;
   const stack: Matrix[] = [];
   let closest: Omit<Highlight, 'page'> | undefined;
-  let bestDistance = 18;
+  let bestDistance = tolerance;
   let bestCenterDistance = Infinity;
   const consider = (transform: Matrix) => {
     const combined = pdfjs.Util.transform(viewport.transform, transform);
@@ -95,7 +95,7 @@ class PdfAssets {
 
 interface Props {
   pdfBytes: ArrayBuffer | null;
-  onDoubleClick: (page: number, x: number, y: number) => void;
+  onDoubleClick: (page: number, x: number, y: number, image?: { x: number; y: number }) => void;
 }
 
 function PdfPage({
@@ -111,7 +111,7 @@ function PdfPage({
   pageNumber: number;
   viewport: PdfPageData['viewport'];
   highlight: Highlight | null;
-  onDoubleClick: (page: number, x: number, y: number) => void;
+  onDoubleClick: Props['onDoubleClick'];
   registerRef: (el: HTMLDivElement | null) => void;
   onDestination: (dest: string | unknown[]) => Promise<void>;
 }) {
@@ -168,7 +168,17 @@ function PdfPage({
     if (!rect) return;
     const x = (e.clientX - rect.left) / viewport.scale;
     const y = (e.clientY - rect.top) / viewport.scale;
-    onDoubleClick(pageNumber, x, y);
+    if ((e.target as Element).closest('.pdf-text-layer span')) {
+      onDoubleClick(pageNumber, x, y);
+      return;
+    }
+    void pdfDoc.getPage(pageNumber).then((page) => matchingImage(page, x, y, 0)).then((image) => {
+      // The graphic's TeX box is anchored at its baseline.
+      onDoubleClick(pageNumber, x, y, image ? {
+        x: image.x + image.width / 2,
+        y: image.y + image.height - 0.1,
+      } : undefined);
+    }, () => onDoubleClick(pageNumber, x, y));
   };
 
   return (
@@ -425,7 +435,7 @@ const PreviewPane = forwardRef<PreviewHandle, Props>(({ pdfBytes, onDoubleClick 
             setHighlight(null);
             view.scrollTo({ top: view.scrollTop + page.getBoundingClientRect().top - view.getBoundingClientRect().top + y, behavior: 'smooth' });
           }}
-          onDoubleClick={(page, x, y) => { if (Date.now() - lastPan.current > 250) onDoubleClick(page, x, y); }}
+          onDoubleClick={(page, x, y, image) => { if (Date.now() - lastPan.current > 250) onDoubleClick(page, x, y, image); }}
           registerRef={(el) => {
             pageRefs.current[p.number] = el;
           }}

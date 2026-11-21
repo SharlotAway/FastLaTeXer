@@ -68,28 +68,37 @@ export function registerLatexLanguage(monaco: any) {
           },
         }],
         [/\$\$/, 'keyword.math', '@mathDisplay'],
-        [/\\\[/, 'keyword.math', '@mathDisplay'],
+        [/\\\[/, 'keyword.math', '@mathBrackets'],
         [/\$/, 'keyword.math', '@mathInline'],
-        [/\\\(/, 'keyword.math', '@mathInline'],
+        [/\\\(/, 'keyword.math', '@mathParens'],
+        [/\\[^a-zA-Z@\s]/, 'keyword'],
         [/[{}[\]]/, '@brackets'],
         [/[0-9]+/, 'number'],
       ],
       mathInline: [
         [/\$/, 'keyword.math', '@pop'],
-        [/\\(?:[a-zA-Z@]+)/, {
-          cases: { '@mathCommands': 'keyword.math', '@default': 'keyword' },
-        }],
-        [/[{}[\]]/, '@brackets'],
-        [/[^$\\{}[\]]+/, 'string.math'],
+        { include: '@mathContent' },
       ],
       mathDisplay: [
         [/\$\$/, 'keyword.math', '@pop'],
+        { include: '@mathContent' },
+      ],
+      mathParens: [
+        [/\\\)/, 'keyword.math', '@pop'],
+        { include: '@mathContent' },
+      ],
+      mathBrackets: [
         [/\\\]/, 'keyword.math', '@pop'],
+        { include: '@mathContent' },
+      ],
+      mathContent: [
+        [/%.*$/, 'comment'],
         [/\\(?:[a-zA-Z@]+)/, {
           cases: { '@mathCommands': 'keyword.math', '@default': 'keyword' },
         }],
+        [/\\[^a-zA-Z@\s]/, 'keyword'],
         [/[{}[\]]/, '@brackets'],
-        [/[^$\\{}[\]]+/, 'string.math'],
+        [/[^$%\\{}[\]]+/, 'string.math'],
       ],
     },
   });

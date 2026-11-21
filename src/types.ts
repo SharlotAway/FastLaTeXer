@@ -110,7 +110,7 @@ export interface WindowApi {
   copyText: (text: string) => Promise<void>;
   compile: (opts: CompileOptions) => Promise<CompileResult>;
   synctexForward: (opts: { pdfPath: string; line: number; column: number; inputFile: string }) => Promise<SyncForwardResult | null>;
-  synctexInverse: (opts: { pdfPath: string; page: number; x: number; y: number }) => Promise<SyncInverseResult | null>;
+  synctexInverse: (opts: { pdfPath: string; mainFile?: string; page: number; x: number; y: number }) => Promise<SyncInverseResult | null>;
   onFileChanged: (cb: (data: { event: string; path: string }) => void) => () => void;
   onCompileProgress: (cb: (data: { phase: string; mainFile?: string; success?: boolean }) => void) => () => void;
 }

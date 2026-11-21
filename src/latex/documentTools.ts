@@ -15,7 +15,9 @@ export function bibliographyKeys(source: string) {
   return Array.from(source.matchAll(/^\s*@(?!(?:comment|string|preamble)\b)[a-z]+\s*[{(]\s*([^\s,{}()]+)\s*,/gim), (match) => match[1]);
 }
 
-export function forwardSyncTarget(source: string, line: number) {
+export function forwardSyncTarget(source: string, line: number): {
+  line: number; image: boolean; source?: { line: number; column: number };
+} {
   const text = withoutComments(source);
   const cursorLine = Math.max(1, line);
   const offset = text.split('\n', cursorLine - 1).reduce((size, row) => size + row.length + 1, 0);
@@ -23,8 +25,11 @@ export function forwardSyncTarget(source: string, line: number) {
   const lineEnd = endOfLine === -1 ? text.length : endOfLine;
   const graphics = [...text.matchAll(/\\includegraphics\*?\s*(?:\[[^\]]*\]\s*)?\{(?:[^{}]|\{[^{}]*\})*\}/g)];
   const graphicsLine = (image: RegExpExecArray) => findLocation(text, image.index + image[0].length - 1).line;
+  const imageTarget = (image: RegExpExecArray) => ({
+    line: graphicsLine(image), image: true, source: findLocation(text, image.index),
+  });
   const direct = graphics.filter((image) => image.index <= lineEnd && image.index + image[0].length > offset);
-  if (direct.length) return { line: graphicsLine(direct[0]), image: true };
+  if (direct.length) return imageTarget(direct[0]);
 
   // SyncTeX may map a float's opening or closing line to surrounding prose.
   // A typeset command inside the float has the actual output page and coordinates.
@@ -34,7 +39,7 @@ export function forwardSyncTarget(source: string, line: number) {
     const images = graphics.filter((image) => image.index >= block.index && image.index < end);
     if (images.length) {
       const nearest = images.reduce((a, b) => Math.abs(graphicsLine(b) - line) < Math.abs(graphicsLine(a) - line) ? b : a);
-      return { line: graphicsLine(nearest), image: true };
+      return imageTarget(nearest);
     }
     if (/^\s*\\(?:begin|end|centering|label)\b/.test(text.slice(offset, lineEnd))) {
       const caption = block[0].search(/\\caption\b/);

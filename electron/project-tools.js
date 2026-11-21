@@ -49,7 +49,7 @@ async function storeImage(root, name, bytes) {
   }
 }
 
-function registerProjectTools({ getRoot, getWindow, resolveDirectory, translate }) {
+function registerProjectTools({ getRoot, getWindow, resolveDirectory, translate, showExportResult }) {
   const requireRoot = (event) => {
     const root = getRoot(event);
     if (!root) throw new Error(translate('请先打开项目。', 'Open a project first.'));
@@ -133,11 +133,12 @@ function registerProjectTools({ getRoot, getWindow, resolveDirectory, translate 
       if (within(root, target)) exclusions.push('./' + path.relative(root, target).split(path.sep).join('/'));
       await execute('tar', ['-a', '-c', '-f', archive, ...exclusions.map((name) => '--exclude=' + name), '-C', root, '.'], { windowsHide: true, timeout: 120_000 });
       await fs.copyFile(archive, target);
-      return target;
     } finally {
       await fs.unlink(archive).catch(() => {});
       await fs.rmdir(staging).catch(() => {});
     }
+    await showExportResult(getWindow(event), target);
+    return target;
   });
   ipcMain.handle('workspace:git', async (event, action, value) => {
     const root = requireRoot(event);

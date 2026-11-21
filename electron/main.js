@@ -333,12 +333,32 @@ function createWindow(root = null) {
   }
 }
 
+async function showExportResult(window, target, isPdf = false) {
+  const reveal = translate('在文件夹中显示', 'Show in Folder');
+  const close = translate('关闭', 'Close');
+  const buttons = isPdf ? [translate('打开 PDF', 'Open PDF'), reveal, close] : [reveal, close];
+  const { response } = await dialog.showMessageBox(window, {
+    type: 'info',
+    message: translate('导出完成', 'Export complete'),
+    detail: target,
+    buttons,
+    cancelId: buttons.length - 1,
+  });
+  if (isPdf && response === 0) {
+    const error = await shell.openPath(target);
+    if (error) throw new Error(error);
+  } else if (response === (isPdf ? 1 : 0)) {
+    shell.showItemInFolder(target);
+  }
+}
+
 function registerIpc() {
   registerProjectTools({
     getRoot: (event) => projectWindow(event).root,
     getWindow: (event) => projectWindow(event).window,
     resolveDirectory: (event, directory) => projectDirectory(projectWindow(event), directory),
     translate,
+    showExportResult,
   });
   ipcMain.handle('workspace:open', (event, root) => openProject(projectWindow(event), root));
   ipcMain.handle('workspace:close', async (event) => {
@@ -443,6 +463,7 @@ function registerIpc() {
     if (result.canceled || !result.filePath) return null;
     const target = /\.pdf$/i.test(result.filePath) ? result.filePath : result.filePath + '.pdf';
     await fsp.writeFile(target, new Uint8Array(bytes));
+    await showExportResult(window, target, true);
     return target;
   });
 
@@ -501,21 +522,37 @@ function registerIpc() {
   });
 
   ipcMain.handle('synctex:forward', async (_e, opts) => synctexForward(opts));
-  ipcMain.handle('synctex:inverse', async (_e, opts) => synctexInverse(opts));
+  ipcMain.handle('synctex:inverse', async (event, opts) => {
+    const { root } = projectWindow(event);
+    return synctexInverse({ ...opts, rootDir: root });
+  });
 }
 
-app.whenReady().then(async () => {
-  logLine('app ready reached');
-  await Promise.all([loadRecentProjects(), loadWindowTheme()]);
-  updateMenu();
-  registerIpc();
-  createWindow();
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+    if (window) {
+      if (window.isMinimized()) window.restore();
+      window.show();
+      window.focus();
+    }
   });
-}).catch((e) => {
-  logLine('whenReady FAILED: ' + ((e && e.stack) || e));
-});
+
+  app.whenReady().then(async () => {
+    logLine('app ready reached');
+    await Promise.all([loadRecentProjects(), loadWindowTheme()]);
+    updateMenu();
+    registerIpc();
+    createWindow();
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
+  }).catch((e) => {
+    logLine('whenReady FAILED: ' + ((e && e.stack) || e));
+  });
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
