@@ -1,0 +1,33 @@
+/* Colors used before the renderer restores the selected theme. */
+:root:not([data-theme]),
+:root[data-theme="furina-dark"] {
+  color-scheme: dark;
+
+  --bg: #141c32;
+  --bg2: #1c2945;
+  --bg3: #253553;
+  --bg4: #2d4064;
+  --border: #435a80;
+  --fg: #ecf4ff;
+  --fg-muted: #b3c4e2;
+  --accent: #385cac;
+  --accent-hover: #3a60b1;
+  --err: #ff99a9;
+  --warn: #ffcf76;
+  --ok: #8fdfc9;
+  --preview-bg: #10182a;
+  --selection: #344a72;
+
+  --editor-line: #1c2945;
+  --editor-selection: #30486f;
+  --editor-cursor: #9cddfa;
+  --editor-line-number: #9eafd0;
+  --editor-comment: #a6b9d3;
+  --editor-command: #9abaff;
+  --editor-section: #dbb6ff;
+  --editor-environment: #83deea;
+  --editor-math: #b9c5ff;
+  --editor-math-text: #a4e6c9;
+  --editor-number: #ffce7f;
+  --editor-delimiter: #a4d7ff;
+}

@@ -1,5 +1,7 @@
 # FastLaTeXer
 
+<img src="src/assets/fastlatexer.png" alt="FastLaTeXer 图标" width="72" height="72">
+
 FastLaTeXer 是一款面向 Windows 的本地 LaTeX 桌面编辑器。文件树、源码编辑器和 PDF 预览同屏显示，适合在同一窗口中编写、编译和检查多文件 LaTeX 项目。
 
 ## 项目特点
@@ -7,7 +9,7 @@ FastLaTeXer 是一款面向 Windows 的本地 LaTeX 桌面编辑器。文件树�
 - **本机编译，离线写作**。项目文件保存在本机，编译调用已安装的 TeX Live，支持 XeLaTeX、pdfLaTeX 和 LuaLaTeX。配置好文档所需的宏包和字体后，可以离线编译英文、中文和中英混排文档。
 - **源码、PDF 和诊断联动**。按 `Ctrl+S` 保存并编译，生成的 PDF 在侧栏更新。通过 SyncTeX 可在源码和 PDF 之间双向跳转，也可以点击问题面板中的诊断定位源码。
 - **适合多文件项目**。在 `\input{…}`、`\include{…}` 中可按前缀补全项目路径，文件大纲和标签搜索可直接跳到源码。项目可在独立窗口打开，Git 面板可查看提交历史和改动。
-- **桌面安装与界面自定义**。提供 Windows x64 安装包，内置 Electron。界面支持中文和英文，可切换深色、浅色、宵宫和芙宁娜四套配色，并记住上次使用的主题。
+- **桌面安装与界面自定义**。提供 Windows x64 安装包，内置 Electron。界面支持中文和英文，提供常规浅色、深色与宵宫、芙宁娜两组主题，并记住上次使用的配色。
 
 ## 安装
 
@@ -34,7 +36,7 @@ git --version   # 仅使用 Git 面板时需要
 ### 方式一：用安装包安装
 
 1. 取得 `FastLaTeXer-Setup-<版本>-x64.exe`。在本仓库自行构建的安装包位于 `release/`，例如 `release/FastLaTeXer-Setup-0.1.0-x64.exe`。
-2. 双击安装包，选择为当前用户安装，并确认安装目录。默认目录为 `%LOCALAPPDATA%\Programs\FastLaTeXer`。安装包自带 Electron，无需安装 Node.js 或 npm。
+2. 双击安装包，选择为当前用户安装。首次安装时，可在「选择安装位置」页面用「浏览」指定目录。默认目录为 `%LOCALAPPDATA%\Programs\FastLaTeXer`。覆盖升级通常沿用已有目录并跳过这一步，静默安装也不会显示向导。安装包自带 Electron，无需安装 Node.js 或 npm。
 3. 从桌面或开始菜单启动，或者双击安装目录中的 `FastLaTeXer.exe`。卸载时运行同一目录中的 `uninstall.exe`。
 
 NSIS 安装程序需要能写入 `TEMP` 和 `TMP` 指向的临时目录。它们通常指向 `%LOCALAPPDATA%\Temp`。若出现 **Error writing temporary file**，可在仓库根目录执行下面的命令。命令将安装包复制到用户的本地应用数据目录，并仅为这次安装指定临时目录，退出后恢复当前 PowerShell 中的原值。
@@ -116,7 +118,14 @@ npm.cmd run package:win
 
 ## 首次打开项目
 
-启动后点击 **「📂 打开文件夹」**，选择一个 LaTeX 项目目录即可。可先打开仓库内的 `samples/demo` 体验完整流程。
+启动后从 **「文件 → 打开项目文件夹」** 选择打开方式，再选择 LaTeX 项目目录。可先打开仓库内的 `samples/demo` 体验完整流程。
+
+打开 [`samples/presentation`](samples/presentation/)，选中 `main.tex` 并按 `Ctrl+S`，即可编译竖版 A4 双栏产品介绍。示例使用 XeLaTeX、`ctex` 和 TeX Live 提供的 Fandol 字体。从仓库根目录执行以下命令也可编译。
+
+```powershell
+Set-Location .\samples\presentation
+latexmk -xelatex -outdir=.build main.tex
+```
 
 打开项目文件夹时可选择在当前窗口打开或在新窗口打开。新窗口拥有独立的项目、编辑器和预览。
 
@@ -126,23 +135,29 @@ npm.cmd run package:win
 
 ### 在应用内切换
 
-- 顶部「设置」可以切换中文或英文界面，也可切换深色、浅色、宵宫和芙宁娜主题。应用会在下次启动时恢复上次使用的主题。
+- 顶部「设置」可以切换中文或英文界面，也可选择常规浅色、深色及宵宫、芙宁娜的浅色和深色主题。编辑器、工具栏和窗口标题栏会一起换色，应用会在下次启动时恢复上次使用的主题。
 - 顶部工具栏可以切换 LaTeX 引擎和输入后自动编译。若希望某份文档始终使用指定引擎，可在主 `.tex` 文件开头添加 `% !TEX program = xelatex`，也可改用 `pdflatex` 或 `lualatex`。
+
+### 界面预览
+
+六张截图都来自同一个项目，展示文件树与大纲、LaTeX 源码高亮，以及编译后的 PDF 预览。点击截图可查看原图。
+
+| 浅色                                                         | 深色                                                         |
+| ------------------------------------------------------------ | ------------------------------------------------------------ |
+| **常规浅色**<br>[![常规浅色的 FastLaTeXer 工作区](samples/presentation/assets/light.png)](samples/presentation/assets/light.png) | **常规深色**<br>[![常规深色的 FastLaTeXer 工作区](samples/presentation/assets/dark.png)](samples/presentation/assets/dark.png) |
+| **宵宫主题配色-浅色**<br>[![宵宫主题浅色的 FastLaTeXer 工作区](samples/presentation/assets/yoimiya-light.png)](samples/presentation/assets/yoimiya-light.png) | **宵宫主题配色-深色**<br>[![宵宫主题深色的 FastLaTeXer 工作区](samples/presentation/assets/yoimiya-dark.png)](samples/presentation/assets/yoimiya-dark.png) |
+| **芙宁娜主题配色-浅色**<br>[![芙宁娜主题浅色的 FastLaTeXer 工作区](samples/presentation/assets/furina-light.png)](samples/presentation/assets/furina-light.png) | **芙宁娜主题配色-深色**<br>[![芙宁娜主题深色的 FastLaTeXer 工作区](samples/presentation/assets/furina-dark.png)](samples/presentation/assets/furina-dark.png) |
+
+[查看 A4 双栏产品介绍 PDF](samples/presentation/FastLaTeXer.pdf) · [查看 LaTeX 示例源码](samples/presentation/)
 
 ### 从源码添加新主题
 
-主题由界面配色、Monaco 编辑器配色和 Electron 窗口配置共同组成。以下以新增浅色「海盐」主题为例，统一使用标识 `sea-salt`。
+[`@themes/`](@themes/) 下每套主题各有一个 CSS 文件。工作区、Monaco 和 Electron 标题栏使用同一份配色，设置菜单的中英文名称记录在 [`catalog.json`](@themes/catalog.json)。
 
-1. **界面配色**。在 [`src/App.css`](src/App.css) 中复制现有的芙宁娜主题块，把选择器改成 `:root[data-theme="sea-salt"]`，再替换颜色。保留整组变量。重点调整背景 `--bg`、工具栏与标题栏背景 `--bg2`、正文 `--fg`、次要文字 `--fg-muted`、强调色 `--accent` 和选中背景 `--selection`。浅色主题保留 `color-scheme: light`。
-2. **编辑器配色**。在 [`src/latex/monacoSetup.ts`](src/latex/monacoSetup.ts) 中复制现有的 `defineLightTheme` 调用，把主题名改为 `latex-sea-salt`。编辑器背景与正文色使用带 `#` 的六位十六进制颜色，语法高亮数组中的颜色保持六位且省略 `#`。制作深色主题时，可复制 `latex-dark` 的定义，保留 `base: 'vs-dark'`。
-3. **开放设置选项**。在 [`src/types.ts`](src/types.ts) 的 `Theme` 类型中加入 `'sea-salt'`，再在 [`src/components/Workbench.tsx`](src/components/Workbench.tsx) 的主题下拉框中加入这一项：
-
-   ```tsx
-   <option value="sea-salt">{t('海盐主题配色', 'Sea Salt')}</option>
-   ```
-
-4. **接入持久化**。在 [`src/App.tsx`](src/App.tsx) 中两处 `readPreference(themeKey, …)` 调用的候选列表里加入 `'sea-salt'`。再在 [`electron/main.js`](electron/main.js) 的 `validTheme` 列表中加入同一标识，使标题栏和下次启动也能使用这套配色。传给 Electron 的 `--bg`、`--bg2` 和 `--fg` 必须是 `#RRGGBB` 格式。
-5. **验证并打包**。运行 `npm.cmd run typecheck`，关闭所有开发窗口后用 `npm.cmd run dev` 重新启动。在「设置 → 主题」中选中海盐主题，查看正文、注释、语法高亮、当前行和选区是否清晰，再关闭并重开应用检查主题是否恢复。若要让正式安装版包含新主题，运行 `npm.cmd run package:win` 重新生成安装包。
+1. 复制一个现有主题，例如将 `furina-light.css` 复制为 `sea-salt.css`。把选择器改为 `:root[data-theme="sea-salt"]`，并将 `color-scheme` 设为 `light` 或 `dark`。
+2. 修改 CSS 变量，颜色使用 `#RRGGBB`。`--bg` 和 `--fg` 控制编辑区背景和正文，`--bg2` 控制工具栏与标题栏背景。`--editor-*` 控制当前行、选区、光标和语法高亮。检查语法颜色在正文背景、当前行和选区上都易读。
+3. 在 `catalog.json` 的 `themes` 中增加一个键名为 `sea-salt` 的条目，填写 `zh` 和 `en`。键名需与 CSS 文件名和选择器中的主题标识一致。
+4. 运行 `npm.cmd run typecheck`，重新启动开发版后在「设置 → 主题」中选择新主题。若要让正式安装版包含新主题，运行 `npm.cmd run package:win`。
 
 若只想更换编辑器字体或字号，可在 [`src/components/EditorPane.tsx`](src/components/EditorPane.tsx) 的 Monaco 初始化配置中调整 `fontFamily`、`fontSize` 和 `lineHeight`。
 
@@ -150,7 +165,7 @@ npm.cmd run package:win
 
 | 需求 | 状态 |
 | --- | --- |
-| 打开项目文件夹 | ✅ 「打开文件夹」按钮 / `Ctrl+O` |
+| 打开项目文件夹 | ✅ 「文件 → 打开项目文件夹」/ `Ctrl+O` |
 | 三栏布局（文件树 / 编辑器 / 预览） | ✅ 连接处可拖动调宽 |
 | VS Code 风格工具栏 | ✅ 打开、保存、编译、同步、引擎选择、缩放、自动编译 |
 | 文件树按层级展示 | ✅ 递归展开、当前文件高亮 |
@@ -169,15 +184,18 @@ npm.cmd run package:win
 - `Ctrl+Shift+S` 将当前文件另存为副本
 - `Ctrl+O` 打开项目文件夹
 - `Ctrl+Shift+B` 编译，`Ctrl+B` 加粗，`Ctrl+I` 斜体
+- `Alt+Z` 切换编辑器自动换行，只改变显示方式。
 - 在 PDF 预览中按住 `Ctrl` 并滚动鼠标滚轮缩放
-- 放大后按住 PDF 页面拖动。双击页面仍可跳到源文件。
+- 双击编辑器中的 LaTeX 源码可定位到最近一次编译的 PDF。双击浮动图的代码时，会定位到图片实际排版的页面。
+- PDF 预览默认可拖选文字，按住 `Alt` 再拖动页面。单击 PDF 链接可跳到文内目标或用系统浏览器打开网页，双击其他位置可跳回源码。
 - `Ctrl+Shift+F` 搜索项目。可查找 `\label{...}` 或正文，支持完全匹配、`*` 和 `?` 通配符，以及整词匹配。
-- 双击预览页 → 跳转到源码对应位置
 - 「⇄ 同步」→ 从当前光标定位到预览
 
 在资源管理器中选中文件夹后，可在该目录下新建文件或文件夹。拖入外部文件时，落在文件夹行上会复制到该文件夹，落在文件行上会复制到该文件的同级目录，其他位置会复制到项目根目录。同名文件会保留原件。
 
 在 `\input{…}` 或 `\include{…}` 的参数中输入前缀，可补全项目内的文件路径。右键文件也可直接复制项目相对路径，比如 `sections/abstract.tex`。
+
+在 `\cite{…}` 中可补全通过 `\bibliography{…}` 或 `\addbibresource{…}` 引入的文献键。在 `\ref{…}`、`\eqref{…}` 等命令中可补全项目的 `\label{…}`。
 
 编译后可从预览栏或「文件」菜单导出当前 PDF。「文件 → 打开最近项目」会保留最近打开的项目路径。
 
@@ -188,6 +206,7 @@ npm.cmd run package:win
 在其他编辑器保存项目中的文件后，FastLaTeXer 会刷新文件树，并自动载入当前文件的磁盘版本。如果当前编辑区也有未保存修改，会保留编辑内容并提示选择「载入磁盘版本」或「保留编辑器版本」。选择保留后，可手动保存或先用「另存为」保存副本。
 
 - 编译调用本机 `latexmk`（默认 **XeLaTeX**，支持中文/UTF-8），构建产物隔离在项目内 `.build/` 目录。
+- 文件树会隐藏项目内的 LaTeX 中间产物，例如 `.aux`、`.log`、`.fls` 和 `.synctex.gz`。这些文件仍保存在磁盘上，可供编译和 SyncTeX 使用。
 - 中文或中英混排文档可用 `\documentclass[UTF8]{ctexart}`，也可在现有文档类中加载 `ctex`。普通英文文档可继续使用 `article`、`report` 等文档类。
 - 支持 `% !TEX program = xelatex` 魔法注释自动选择引擎。
 - 错误/警告来自对 `.log` 的解析（`-file-line-error` 提供精确行号）。
@@ -197,9 +216,11 @@ npm.cmd run package:win
 
 ```
 electron/        主进程与预加载（文件系统、编译、SyncTeX）
+@themes/         独立主题 CSS、主题目录与配色加载逻辑
 src/             渲染层（React + Monaco + PDF.js）
   latex/         Monaco 配置、LaTeX 高亮、补全
   components/    UI 组件
 scripts/         开发期验证脚本（日志解析、端到端编译/同步）
-samples/demo/    示例 LaTeX 项目
+samples/demo/          基础 LaTeX 示例
+samples/presentation/  双栏产品介绍的 LaTeX 源码、六套主题截图与 PDF
 ```

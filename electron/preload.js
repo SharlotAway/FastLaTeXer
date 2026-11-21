@@ -44,6 +44,7 @@ contextBridge.exposeInMainWorld('api', {
   readBinary: (p) => ipcRenderer.invoke('fs:readBinary', p),
   readPdfAsset: (kind, filename) => ipcRenderer.invoke('pdf:asset', kind, filename),
   revealInFolder: (p) => ipcRenderer.invoke('shell:reveal', p),
+  openPdfLink: (url) => ipcRenderer.invoke('shell:openPdfLink', url),
   copyText: (text) => ipcRenderer.invoke('clipboard:writeText', text),
   compile: (opts) => ipcRenderer.invoke('compile', opts),
   synctexForward: (opts) => ipcRenderer.invoke('synctex:forward', opts),

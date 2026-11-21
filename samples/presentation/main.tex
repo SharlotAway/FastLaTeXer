@@ -1,0 +1,27 @@
+% !TEX program = xelatex
+\documentclass[UTF8,fontset=fandol,a4paper,twocolumn,zihao=5]{ctexart}
+\usepackage{graphicx}
+
+\input{sections/layout}
+
+\title{\bfseries FastLaTeXer\\[.4em]
+  \large 面向 Windows 的本地 LaTeX 编辑器}
+\author{}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+FastLaTeXer 将文件树、源码编辑器和 PDF 预览放在同一个窗口中。
+它通过本机 TeX Live 编译文档，支持源码与 PDF 双向定位、项目内补全和 Git 历史浏览。
+配置好所需宏包和字体后，可离线编辑中文、英文及中英混排文档。
+\end{abstract}
+
+% 正文和界面图例由独立文件维护。
+\input{sections/workflow}
+
+\input{sections/themes}
+
+\end{document}

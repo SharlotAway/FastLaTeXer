@@ -1,0 +1,15 @@
+{
+  "defaultTheme": "furina-dark",
+  "legacy": {
+    "yoimiya": "yoimiya-light",
+    "furina": "furina-light"
+  },
+  "themes": {
+    "light": { "zh": "浅色", "en": "Light" },
+    "dark": { "zh": "深色", "en": "Dark" },
+    "yoimiya-light": { "zh": "宵宫主题配色-浅色", "en": "Yoimiya Palette (Light)" },
+    "yoimiya-dark": { "zh": "宵宫主题配色-深色", "en": "Yoimiya Palette (Dark)" },
+    "furina-light": { "zh": "芙宁娜主题配色-浅色", "en": "Furina Palette (Light)" },
+    "furina-dark": { "zh": "芙宁娜主题配色-深色", "en": "Furina Palette (Dark)" }
+  }
+}

@@ -1,7 +1,7 @@
-import type { CompileResult, OpenMode } from '../types';
+import type { CompileResult } from '../types';
 import type { ReactNode } from 'react';
 import { useText } from '../preferences';
-import { ApplicationMenus, Dropdown } from './Workbench';
+import { ApplicationMenus } from './Workbench';
 
 export default function Toolbar({
   projectName,
@@ -12,7 +12,6 @@ export default function Toolbar({
   lastResult,
   autoCompile,
   onAutoCompileChange,
-  onOpenFolder,
   onEditorMenuAction,
   onSave,
   onCompile,
@@ -28,7 +27,6 @@ export default function Toolbar({
   lastResult: CompileResult | null;
   autoCompile: boolean;
   onAutoCompileChange: (v: boolean) => void;
-  onOpenFolder: (mode: OpenMode) => void;
   onEditorMenuAction: (role: string) => boolean;
   onSave: () => void;
   onCompile: () => void;
@@ -43,10 +41,6 @@ export default function Toolbar({
   return (
     <div className="toolbar">
       <ApplicationMenus onEditorAction={onEditorMenuAction} />
-      <Dropdown label={<>📂 {t('打开文件夹', 'Open Project')} <span className="toolbar-chevron" aria-hidden="true">⌄</span></>}>
-        <button onClick={() => onOpenFolder('current')}>{t('在当前窗口打开', 'Open in Current Window')}</button>
-        <button onClick={() => onOpenFolder('new')}>{t('在新窗口打开', 'Open in New Window')}</button>
-      </Dropdown>
       {children}
       <span className="tb-sep" />
       <button className="tb-btn" onClick={onSave} title={t('保存（Ctrl+S 保存并编译）', 'Save (Ctrl+S saves and compiles)')} disabled={!currentFile}>

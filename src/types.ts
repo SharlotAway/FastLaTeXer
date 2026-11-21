@@ -1,3 +1,5 @@
+import type { Theme } from '../@themes';
+
 export interface TreeNode {
   name: string;
   path: string;
@@ -61,13 +63,12 @@ export interface AppMenuItem {
 }
 export type AppMenu = { revision: number; items: AppMenuItem[] };
 export type Language = 'zh' | 'en';
-export type Theme = 'dark' | 'light' | 'yoimiya' | 'furina';
 export type ImageSource = 'local' | 'project' | 'another' | 'url';
 export type GitCommit = { hash: string; short: string; date: string; author: string; subject: string };
 export type GitStatus = { exists: boolean; remote: string; branch: string; commits: GitCommit[] };
 
 export type FileCommand =
-  | { type: 'open' | 'save' | 'saveAs' | 'exportPdf' | 'newFile' | 'newFolder' | 'upload' | 'copy' | 'history' | 'wordCount' | 'submit' | 'archive' | 'settings' }
+  | { type: 'open' | 'openCurrent' | 'openNew' | 'save' | 'saveAs' | 'exportPdf' | 'newFile' | 'newFolder' | 'upload' | 'copy' | 'history' | 'wordCount' | 'submit' | 'archive' | 'settings' }
   | { type: 'recent'; project: string };
 
 export interface WindowApi {
@@ -80,7 +81,7 @@ export interface WindowApi {
   closeWorkspace: () => Promise<void>;
   setMenuLanguage: (language: Language) => Promise<void>;
   initialTheme?: Theme;
-  applyWindowTheme: (palette: { theme: Theme; color: string; symbolColor: string; background: string }) => Promise<void>;
+  applyWindowTheme: (palette: { theme: Theme }) => Promise<void>;
   getApplicationMenu: () => Promise<AppMenu | null>;
   activateMenuItem: (revision: number, indices: number[]) => Promise<void>;
   onApplicationMenu: (callback: (menu: AppMenu | null) => void) => () => void;
@@ -105,6 +106,7 @@ export interface WindowApi {
   readBinary: (p: string) => Promise<ArrayBuffer>;
   readPdfAsset: (kind: string, filename: string) => Promise<ArrayBuffer>;
   revealInFolder: (p: string) => Promise<boolean>;
+  openPdfLink: (url: string) => Promise<void>;
   copyText: (text: string) => Promise<void>;
   compile: (opts: CompileOptions) => Promise<CompileResult>;
   synctexForward: (opts: { pdfPath: string; line: number; column: number; inputFile: string }) => Promise<SyncForwardResult | null>;

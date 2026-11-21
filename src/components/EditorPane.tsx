@@ -1,9 +1,10 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { useText } from '../preferences';
 import monaco from '../latex/monacoSetup';
 import type * as monacoNs from 'monaco-editor';
 import type { Diagnostic } from '../types';
 import type { TextEdit } from '../latex/documentTools';
-import { setProjectCompletionPaths } from '../latex/completion';
+import { setProjectCompletionPaths, type ReferenceKeys } from '../latex/completion';
 
 export interface EditorHandle {
   getPosition: () => { line: number; column: number };
@@ -20,11 +21,18 @@ interface Props {
   filePath: string;
   content: string;
   onChange: (content: string) => void;
+  onDoubleClick: (line: number, column: number) => void;
   diagnostics: Diagnostic[];
   projectPaths: readonly string[];
+  referenceKeys: ReferenceKeys;
 }
 
 const ITEM_ENVS = ['itemize', 'enumerate', 'description'];
+const EDIT_COMMANDS: Record<string, string> = {
+  undo: 'undo', redo: 'redo', cut: 'editor.action.clipboardCutAction',
+  copy: 'editor.action.clipboardCopyAction', paste: 'editor.action.clipboardPasteAction',
+  delete: 'deleteRight', selectall: 'editor.action.selectAll',
+};
 
 function itemEnvDepth(model: monacoNs.editor.ITextModel, lineNumber: number): number {
   const re = /\\(begin|end)\s*\{([^}]+)\}/g;
@@ -69,10 +77,34 @@ function handleAutoItem(editor: monacoNs.editor.IStandaloneCodeEditor, e: monaco
   editor.setPosition(new monaco.Position(line, insert.length + 1));
 }
 
-const EditorPane = forwardRef<EditorHandle, Props>(({ filePath, content, onChange, diagnostics, projectPaths }, ref) => {
+const EditorPane = forwardRef<EditorHandle, Props>(({ filePath, content, onChange, onDoubleClick, diagnostics, projectPaths, referenceKeys }, ref) => {
+  const t = useText();
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<monacoNs.editor.IStandaloneCodeEditor | null>(null);
   const updatingFromDisk = useRef(false);
+  const doubleClickRef = useRef(onDoubleClick);
+  doubleClickRef.current = onDoubleClick;
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const dismiss = (event: PointerEvent) => {
+      if (event.target instanceof Node && !menuRef.current?.contains(event.target)) setContextMenu(null);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setContextMenu(null);
+        editorRef.current?.focus();
+      }
+    };
+    window.addEventListener('pointerdown', dismiss);
+    window.addEventListener('keydown', escape);
+    return () => {
+      window.removeEventListener('pointerdown', dismiss);
+      window.removeEventListener('keydown', escape);
+    };
+  }, [contextMenu]);
 
   useEffect(() => {
     if (!hostRef.current) return;
@@ -85,6 +117,7 @@ const EditorPane = forwardRef<EditorHandle, Props>(({ filePath, content, onChang
       lineHeight: 23,
       minimap: { enabled: false },
       wordWrap: 'off',
+      contextmenu: false,
       scrollBeyondLastLine: false,
       tabSize: 2,
       insertSpaces: true,
@@ -95,6 +128,17 @@ const EditorPane = forwardRef<EditorHandle, Props>(({ filePath, content, onChang
       scrollbar: { verticalScrollbarSize: 12, horizontalScrollbarSize: 12 },
     });
     editorRef.current = editor;
+    let wrapped = false;
+    const toggleWrap = () => {
+      wrapped = !wrapped;
+      editor.updateOptions({ wordWrap: wrapped ? 'on' : 'off' });
+    };
+    editor.addAction({
+      id: 'fastlatexer.toggleWordWrap',
+      label: 'Toggle Word Wrap',
+      keybindings: [monaco.KeyMod.Alt | monaco.KeyCode.KeyZ],
+      run: toggleWrap,
+    });
 
     const model = monaco.editor.createModel(content || '', 'latex', monaco.Uri.file(filePath));
     editor.setModel(model);
@@ -104,9 +148,22 @@ const EditorPane = forwardRef<EditorHandle, Props>(({ filePath, content, onChang
       onChange(editor.getValue());
       handleAutoItem(editor, e);
     });
+    const mouse = editor.onMouseDown(({ event, target }) => {
+      if (!event.leftButton || event.detail !== 2 || !target.position) return;
+      if (target.type !== monaco.editor.MouseTargetType.CONTENT_TEXT && target.type !== monaco.editor.MouseTargetType.CONTENT_EMPTY) return;
+      doubleClickRef.current(target.position.lineNumber, target.position.column);
+    });
+    const context = editor.onContextMenu(({ event, target }) => {
+      event.preventDefault();
+      if (target.position && !editor.getSelection()?.containsPosition(target.position)) editor.setPosition(target.position);
+      const { clientX, clientY } = event.browserEvent;
+      setContextMenu({ x: Math.max(0, Math.min(clientX, innerWidth - 250)), y: Math.max(0, Math.min(clientY, innerHeight - 315)) });
+    });
 
     return () => {
       sub.dispose();
+      mouse.dispose();
+      context.dispose();
       editor.getModel()?.dispose();
       editor.dispose();
       editorRef.current = null;
@@ -130,8 +187,8 @@ const EditorPane = forwardRef<EditorHandle, Props>(({ filePath, content, onChang
 
   useEffect(() => {
     const model = editorRef.current?.getModel();
-    if (model) setProjectCompletionPaths(model, projectPaths);
-  }, [filePath, projectPaths]);
+    if (model) setProjectCompletionPaths(model, projectPaths, referenceKeys);
+  }, [filePath, projectPaths, referenceKeys]);
 
   // Update markers from diagnostics (only for the current file).
   useEffect(() => {
@@ -185,13 +242,8 @@ const EditorPane = forwardRef<EditorHandle, Props>(({ filePath, content, onChang
     },
     focus: () => editorRef.current?.focus(),
     runEditMenuAction: (role) => {
-      const commands: Record<string, string> = {
-        undo: 'undo', redo: 'redo', cut: 'editor.action.clipboardCutAction',
-        copy: 'editor.action.clipboardCopyAction', paste: 'editor.action.clipboardPasteAction',
-        delete: 'deleteRight', selectall: 'editor.action.selectAll',
-      };
       const editor = editorRef.current;
-      const command = commands[role.toLowerCase()];
+      const command = EDIT_COMMANDS[role.toLowerCase()];
       if (!editor || !command) return false;
       editor.focus();
       editor.trigger('menu', command, null);
@@ -234,7 +286,31 @@ const EditorPane = forwardRef<EditorHandle, Props>(({ filePath, content, onChang
     },
   }), []);
 
-  return <div ref={hostRef} className="editor-host" />;
+  const items = [
+    ['undo', t('撤销', 'Undo'), 'Ctrl+Z'],
+    ['redo', t('重做', 'Redo'), 'Ctrl+Y'],
+    ['cut', t('剪切', 'Cut'), 'Ctrl+X'],
+    ['copy', t('复制', 'Copy'), 'Ctrl+C'],
+    ['paste', t('粘贴', 'Paste'), 'Ctrl+V'],
+    ['delete', t('删除', 'Delete'), 'Delete'],
+    ['selectall', t('全选', 'Select All'), 'Ctrl+A'],
+    ['actions.find', t('查找', 'Find'), 'Ctrl+F'],
+    ['editor.action.startFindReplaceAction', t('替换', 'Replace'), 'Ctrl+H'],
+    ['fastlatexer.toggleWordWrap', t('切换自动换行', 'Toggle Word Wrap'), 'Alt+Z'],
+  ];
+  return <>
+    <div ref={hostRef} className="editor-host" />
+    {contextMenu && <div className="workbench-dropdown tree-context editor-context" ref={menuRef}
+      style={{ left: contextMenu.x, top: contextMenu.y, width: 250 }}
+      onMouseDown={(event) => event.preventDefault()}>
+      {items.map(([action, label, shortcut]) => <button key={action} onClick={() => {
+        setContextMenu(null);
+        const editor = editorRef.current;
+        editor?.focus();
+        editor?.trigger('context-menu', EDIT_COMMANDS[action] ?? action, null);
+      }}>{label}<kbd>{shortcut}</kbd></button>)}
+    </div>}
+  </>;
 });
 
 EditorPane.displayName = 'EditorPane';

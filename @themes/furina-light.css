@@ -1,0 +1,31 @@
+:root[data-theme="furina-light"] {
+  color-scheme: light;
+
+  --bg: #f2f9ff;
+  --bg2: #e1eefb;
+  --bg3: #d7e7f8;
+  --bg4: #cbdff4;
+  --border: #a6bfdc;
+  --fg: #202e54;
+  --fg-muted: #405475;
+  --accent: #254ea0;
+  --accent-hover: #1c3f86;
+  --err: #a52e43;
+  --warn: #a67a27;
+  --ok: #1b6658;
+  --preview-bg: #ccdeef;
+  --selection: #cce2f8;
+
+  --editor-line: #e6f1fb;
+  --editor-selection: #cfe4fb;
+  --editor-cursor: #254ea0;
+  --editor-line-number: #506889;
+  --editor-comment: #50667f;
+  --editor-command: #1946a3;
+  --editor-section: #542b8d;
+  --editor-environment: #005f72;
+  --editor-math: #333e9d;
+  --editor-math-text: #145f62;
+  --editor-number: #795208;
+  --editor-delimiter: #3b5989;
+}

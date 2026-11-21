@@ -1,0 +1,31 @@
+:root[data-theme="yoimiya-light"] {
+  color-scheme: light;
+
+  --bg: #fff7ed;
+  --bg2: #f8e5d7;
+  --bg3: #f4d9c8;
+  --bg4: #efcdb8;
+  --border: #d7aa97;
+  --fg: #3b2523;
+  --fg-muted: #69463d;
+  --accent: #a33125;
+  --accent-hover: #88261c;
+  --err: #a42725;
+  --warn: #b27a12;
+  --ok: #346044;
+  --preview-bg: #e8cabe;
+  --selection: #f4d4bf;
+
+  --editor-line: #f9ebde;
+  --editor-selection: #f6d8c5;
+  --editor-cursor: #a33125;
+  --editor-line-number: #795e55;
+  --editor-comment: #6d583f;
+  --editor-command: #a3271f;
+  --editor-section: #792254;
+  --editor-environment: #794202;
+  --editor-math: #30469f;
+  --editor-math-text: #185953;
+  --editor-number: #884007;
+  --editor-delimiter: #78435d;
+}

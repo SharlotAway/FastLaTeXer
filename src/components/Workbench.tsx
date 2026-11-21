@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useText } from '../preferences';
+import { themeOptions, themes, type Theme } from '../../@themes';
 import { basename } from '../path';
 import { labels, outline, searchPattern, textMatches, type MatchMode, type SourceLocation } from '../latex/documentTools';
-import type { AppMenu, AppMenuItem, GitStatus, ImageSource, Language, Theme, TreeNode } from '../types';
+import type { AppMenu, AppMenuItem, GitStatus, ImageSource, Language, TreeNode } from '../types';
 
 export type FormatAction = 'bold' | 'italic' | 'bullet' | 'numbered' | 'indent' | 'outdent' |
   'normal' | 'section' | 'subsection' | 'subsubsection' | 'paragraph' | 'subparagraph';
@@ -25,9 +26,48 @@ export function Dropdown({ label, children, preserveFocus }: { label: ReactNode;
   }}>
     <summary className="tb-btn">{label}</summary>
     <div className="workbench-dropdown" onClick={(event) => {
-      if ((event.target as Element).closest('button') && ref.current) ref.current.open = false;
+      const button = (event.target as Element).closest('button');
+      if (button && !button.hasAttribute('data-submenu-trigger') && ref.current) ref.current.open = false;
     }}>{children}</div>
   </details>;
+}
+
+function SideMenu({ label, children }: { label: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const [side, setSide] = useState<'left' | 'right'>('right');
+  const button = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+
+  function reveal(focus = false) {
+    const edge = button.current?.getBoundingClientRect();
+    if (edge) setSide(window.innerWidth - edge.right < 420 && edge.left > window.innerWidth - edge.right ? 'left' : 'right');
+    setOpen(true);
+    if (focus) requestAnimationFrame(() => panel.current?.querySelector<HTMLElement>('button:not(:disabled)')?.focus());
+  }
+
+  return <div className="workbench-submenu" onPointerEnter={(event) => {
+    if (event.pointerType === 'mouse') reveal();
+  }} onPointerLeave={() => setOpen(false)} onBlur={(event) => {
+    if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) setOpen(false);
+  }} onKeyDown={(event) => {
+    if ((event.key === 'ArrowLeft' || event.key === 'Escape') && open) {
+      event.preventDefault();
+      event.stopPropagation();
+      setOpen(false);
+      button.current?.focus();
+    }
+  }}>
+    <button type="button" data-submenu-trigger="" ref={button} aria-expanded={open} onClick={() => reveal()}
+      onKeyDown={(event) => { if (event.key === 'ArrowRight' || event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        reveal(true);
+      } }}>
+      <span className="app-menu-label">{label}</span><span aria-hidden="true">›</span>
+    </button>
+    {open && <div className={`workbench-dropdown side-menu side-menu-${side}`} ref={panel} onClick={(event) => {
+      if ((event.target as Element).closest('button:not([data-submenu-trigger])')) setOpen(false);
+    }}>{children}</div>}
+  </div>;
 }
 
 function MenuEntries({ items, parent, onActivate }: {
@@ -37,9 +77,9 @@ function MenuEntries({ items, parent, onActivate }: {
     if (!item.visible) return null;
     if (item.type === 'separator') return <hr key={index} />;
     const indices = [...parent, index];
-    if (item.items) return <details key={index}><summary>{item.label}</summary>
+    if (item.items) return <SideMenu key={index} label={item.label}>
       <MenuEntries items={item.items} parent={indices} onActivate={onActivate} />
-    </details>;
+    </SideMenu>;
     return <button key={index} title={item.label} disabled={!item.enabled} onClick={() => onActivate(indices, item.role)}>
       <span className="app-menu-label">{item.label}</span>
       {item.accelerator && <kbd>{item.accelerator.replace('CmdOrCtrl', 'Ctrl')}</kbd>}
@@ -77,16 +117,16 @@ export function WorkbenchMenus({ editor, project, onInsert, onFormat, onSearch, 
     <button key={action} disabled={!editor} onClick={() => onFormat(action)}>{t(zh, en)}{key && <kbd>{key}</kbd>}</button>;
   return <>
     <Dropdown label={t('插入', 'Insert')}>
-      <details><summary>{t('数学公式', 'Math')}</summary>
+      <SideMenu label={t('数学公式', 'Math')}>
         {insert('inlineMath', '行内公式', 'Inline Math')}{insert('displayMath', '行间公式', 'Display Math')}
-      </details>
+      </SideMenu>
       {insert('symbol', '符号…', 'Symbol…')}
-      <details><summary>{t('图像', 'Figure')}</summary>
+      <SideMenu label={t('图像', 'Figure')}>
         {insert('local', '从电脑上传…', 'Upload from computer…')}
         {insert('project', '从项目文件…', 'From project files…')}
         {insert('another', '从另一个项目…', 'From another project…')}
         {insert('url', '从网址…', 'From URL…')}
-      </details>
+      </SideMenu>
       {insert('table', '表格', 'Table')}{insert('cite', '引用', 'Citation')}{insert('link', '链接', 'Link')}
       {insert('ref', '交叉引用', 'Cross Reference')}{insert('comment', '评论', 'Comment')}
       <hr />
@@ -133,9 +173,7 @@ export function Settings({ path, language, theme, onLanguage, onTheme }: {
     </label>
     <label>{t('主题', 'Theme')}
       <select value={theme} onChange={(event) => onTheme(event.target.value as Theme)}>
-        <option value="dark">{t('深色', 'Dark')}</option><option value="light">{t('浅色', 'Light')}</option>
-        <option value="yoimiya">{t('宵宫主题配色', 'Yoimiya Palette')}</option>
-        <option value="furina">{t('芙宁娜主题配色', 'Furina Palette')}</option>
+        {themeOptions.map((id) => <option key={id} value={id}>{t(themes[id].zh, themes[id].en)}</option>)}
       </select>
     </label>
   </div>;

@@ -6,6 +6,8 @@ const chokidar = require('chokidar');
 const { compile } = require('./compiler');
 const { synctexForward, synctexInverse } = require('./synctex');
 const { registerProjectTools } = require('./project-tools');
+const themeCatalog = require('../@themes/catalog.json');
+const { windowTheme } = require('../@themes/window.cjs');
 
 function logLine(msg) {
   try {
@@ -24,6 +26,7 @@ app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
 app.commandLine.appendSwitch('disable-gpu-compositing');
 app.commandLine.appendSwitch('in-process-gpu');
+if (process.platform === 'win32') app.setAppUserModelId('com.fastlatexer.desktop');
 
 const windows = new Map();
 let recentProjects = [];
@@ -33,26 +36,33 @@ let menuRevision = 0;
 let savedTheme = null;
 const translate = (zh, en) => menuLanguage === 'en' ? en : zh;
 
-function validTheme(value) {
-  return value && ['dark', 'light', 'yoimiya', 'furina'].includes(value.theme) &&
-    [value.color, value.symbolColor, value.background].every((color) => typeof color === 'string' && /^#[a-f0-9]{6}$/i.test(color));
-}
-
 function themePath() {
   return path.join(app.getPath('userData'), 'window-theme.json');
+}
+
+function writeWindowTheme(palette) {
+  const target = themePath();
+  const temporary = target + '.tmp';
+  fs.writeFileSync(temporary, JSON.stringify(palette), 'utf8');
+  fs.renameSync(temporary, target);
 }
 
 async function loadWindowTheme() {
   try {
     const value = JSON.parse(await fsp.readFile(themePath(), 'utf8'));
-    if (validTheme(value)) savedTheme = value;
+    const theme = value?.theme;
+    if (typeof theme !== 'string') return;
+    if (Object.hasOwn(themeCatalog.themes, theme)) savedTheme = windowTheme(theme);
+    else if (Object.hasOwn(themeCatalog.legacy, theme)) savedTheme = windowTheme(themeCatalog.legacy[theme]);
+    if (savedTheme && JSON.stringify(value) !== JSON.stringify(savedTheme)) writeWindowTheme(savedTheme);
   } catch (error) {
     if (error.code !== 'ENOENT') logLine(String(error));
   }
 }
 
 const IGNORED_DIRS = new Set(['.git', 'node_modules', '.build', '.npm-cache', '.latexbuild', 'dist', '.vscode', '.idea']);
-const TEXT_EXTS = new Set(['', '.tex', '.bib', '.sty', '.cls', '.bst', '.ltx', '.txt', '.md', '.markdown', '.json', '.yml', '.yaml', '.cfg', '.log', '.aux', '.m']);
+const TEXT_EXTS = new Set(['', '.tex', '.bib', '.sty', '.cls', '.bst', '.ltx', '.txt', '.md', '.markdown', '.json', '.yml', '.yaml', '.cfg', '.m']);
+const LATEX_BUILD_FILE = /\.(?:aux|auxlock|log|toc|out|lof|lot|fls|fdb_latexmk|synctex(?:\.gz(?:\(busy\))?)?|bbl|bcf|blg|run\.xml|idx|ind|ilg|glo|gls|glg|acn|acr|alg|nav|snm|vrb|xdv|dvi)$/i;
 
 function isIgnoredDir(name) {
   return IGNORED_DIRS.has(name);
@@ -73,7 +83,7 @@ async function readTree(dir) {
       if (isIgnoredDir(ent.name)) continue;
       const children = await readTree(full);
       nodes.push({ name: ent.name, path: full, type: 'dir', children, editable: false });
-    } else if (ent.isFile()) {
+    } else if (ent.isFile() && !LATEX_BUILD_FILE.test(ent.name)) {
       const ext = path.extname(ent.name).toLowerCase();
       const editable = TEXT_EXTS.has(ext);
       nodes.push({ name: ent.name, path: full, type: 'file', ext, editable, children: [] });
@@ -132,7 +142,10 @@ function updateMenu() {
     {
       label: t('文件', 'File'),
       submenu: [
-        { ...entry('打开项目文件夹…', 'Open Project…', 'open'), accelerator: 'CmdOrCtrl+O' },
+        { label: t('打开项目文件夹', 'Open Project'), submenu: [
+          entry('在当前窗口打开…', 'Open in Current Window…', 'openCurrent'),
+          entry('在新窗口打开…', 'Open in New Window…', 'openNew'),
+        ] },
         {
           label: t('打开最近项目', 'Open Recent'),
           submenu: recentProjects.length ? recentProjects.map((project) => ({
@@ -250,6 +263,7 @@ function startWatcher(state, root) {
   state.watcher = watcher;
   for (const event of ['add', 'change', 'unlink', 'addDir', 'unlinkDir']) {
     watcher.on(event, (file) => {
+      if (!event.endsWith('Dir') && LATEX_BUILD_FILE.test(path.basename(file))) return;
       if (state.watcher === watcher) send(state.window, 'fs:changed', { event, path: file });
     });
   }
@@ -257,18 +271,20 @@ function startWatcher(state, root) {
 }
 
 function createWindow(root = null) {
+  const palette = savedTheme ?? windowTheme(themeCatalog.defaultTheme);
   const window = new BrowserWindow({
     width: 1480,
     height: 940,
     minWidth: 960,
     minHeight: 620,
     title: 'FastLaTeXer',
-    backgroundColor: savedTheme?.background ?? '#1e1e1e',
+    icon: path.join(__dirname, '..', 'build', 'icon.ico'),
+    backgroundColor: palette.background,
     ...(process.platform === 'win32' ? {
       titleBarStyle: 'hidden',
       titleBarOverlay: {
-        color: savedTheme?.color ?? '#252526',
-        symbolColor: savedTheme?.symbolColor ?? '#d4d4d4',
+        color: palette.color,
+        symbolColor: palette.symbolColor,
         height: 32,
       },
     } : {}),
@@ -335,18 +351,15 @@ function registerIpc() {
     updateMenu();
   });
   ipcMain.handle('window:theme', (event, palette) => {
-    if (!validTheme(palette)) return;
+    if (typeof palette?.theme !== 'string' || !Object.hasOwn(themeCatalog.themes, palette.theme)) return;
     const { window } = projectWindow(event);
-    const { theme, color, symbolColor, background } = palette;
+    const next = windowTheme(palette.theme);
+    const { color, symbolColor, background } = next;
     if (process.platform === 'win32') window.setTitleBarOverlay({ color, symbolColor });
     window.setBackgroundColor(background);
-    const next = { theme, color, symbolColor, background };
     if (JSON.stringify(savedTheme) === JSON.stringify(next)) return;
     try {
-      const target = themePath();
-      const temporary = target + '.tmp';
-      fs.writeFileSync(temporary, JSON.stringify(next), 'utf8');
-      fs.renameSync(temporary, target);
+      writeWindowTheme(next);
       savedTheme = next;
     } catch (error) {
       logLine(String(error));
@@ -466,6 +479,11 @@ function registerIpc() {
   ipcMain.handle('shell:reveal', (_e, p) => {
     shell.showItemInFolder(p);
     return true;
+  });
+  ipcMain.handle('shell:openPdfLink', (_event, address) => {
+    const url = new URL(address);
+    if (!['https:', 'http:', 'mailto:'].includes(url.protocol)) return;
+    return shell.openExternal(url.href);
   });
   ipcMain.handle('clipboard:writeText', (_event, text) => clipboard.writeText(text));
 

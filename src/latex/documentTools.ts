@@ -6,6 +6,45 @@ function withoutComments(source: string) {
   return source.replace(/((?:^|[^\\])(?:\\\\)*)%[^\r\n]*/gm, (match, prefix: string) => prefix + ' '.repeat(match.length - prefix.length));
 }
 
+export function bibliographyNames(source: string) {
+  return [...withoutComments(source).matchAll(/\\(?:bibliography|addbibresource)\b\s*(?:\[[^\]]*\]\s*)?\{([^{}]+)\}/g)]
+    .flatMap((match) => match[1].split(',').map((name) => name.trim()).filter(Boolean));
+}
+
+export function bibliographyKeys(source: string) {
+  return Array.from(source.matchAll(/^\s*@(?!(?:comment|string|preamble)\b)[a-z]+\s*[{(]\s*([^\s,{}()]+)\s*,/gim), (match) => match[1]);
+}
+
+export function forwardSyncTarget(source: string, line: number) {
+  const text = withoutComments(source);
+  const cursorLine = Math.max(1, line);
+  const offset = text.split('\n', cursorLine - 1).reduce((size, row) => size + row.length + 1, 0);
+  const endOfLine = text.indexOf('\n', offset);
+  const lineEnd = endOfLine === -1 ? text.length : endOfLine;
+  const graphics = [...text.matchAll(/\\includegraphics\*?\s*(?:\[[^\]]*\]\s*)?\{(?:[^{}]|\{[^{}]*\})*\}/g)];
+  const graphicsLine = (image: RegExpExecArray) => findLocation(text, image.index + image[0].length - 1).line;
+  const direct = graphics.filter((image) => image.index <= lineEnd && image.index + image[0].length > offset);
+  if (direct.length) return { line: graphicsLine(direct[0]), image: true };
+
+  // SyncTeX may map a float's opening or closing line to surrounding prose.
+  // A typeset command inside the float has the actual output page and coordinates.
+  for (const block of text.matchAll(/\\begin\s*\{(figure\*?|table\*?)\}[\s\S]*?\\end\s*\{\1\}/g)) {
+    const end = block.index + block[0].length;
+    if (block.index > lineEnd || end <= offset) continue;
+    const images = graphics.filter((image) => image.index >= block.index && image.index < end);
+    if (images.length) {
+      const nearest = images.reduce((a, b) => Math.abs(graphicsLine(b) - line) < Math.abs(graphicsLine(a) - line) ? b : a);
+      return { line: graphicsLine(nearest), image: true };
+    }
+    if (/^\s*\\(?:begin|end|centering|label)\b/.test(text.slice(offset, lineEnd))) {
+      const caption = block[0].search(/\\caption\b/);
+      if (caption !== -1) return { line: findLocation(text, block.index + caption).line, image: false };
+    }
+    break;
+  }
+  return { line, image: false };
+}
+
 function findLocation(source: string, offset: number) {
   const before = source.slice(0, offset);
   const line = before.split('\n').length;

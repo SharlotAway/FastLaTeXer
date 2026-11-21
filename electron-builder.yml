@@ -5,12 +5,17 @@ directories:
 files:
   - dist/**
   - electron/**
+  - '@themes/*.css'
+  - '@themes/catalog.json'
+  - '@themes/window.cjs'
+  - build/icon.ico
 win:
+  icon: build/icon.ico
   target:
     - target: nsis
       arch:
         - x64
-  signAndEditExecutable: false
+  signExecutable: false
   artifactName: FastLaTeXer-Setup-${version}-${arch}.${ext}
 nsis:
   include: build/installer.nsh

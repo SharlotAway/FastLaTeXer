@@ -1,0 +1,24 @@
+% !TEX root = ../main.tex
+
+\newcommand{\themeshot}[2]{%
+  \par\noindent\begin{minipage}{\columnwidth}
+    \centering
+    \includegraphics[width=\linewidth]{assets/#2.png}
+    \captionof{figure}{#1}\label{fig:#2}
+  \end{minipage}\par\medskip
+}
+
+\twocolumn[{%
+  \section{界面主题}
+  \noindent 六张图使用同一个项目，展示文件树、大纲、源码高亮和 PDF 预览。\par\medskip
+}]
+
+\themeshot{浅色}{light}
+\themeshot{宵宫主题配色-浅色}{yoimiya-light}
+\themeshot{芙宁娜主题配色-浅色}{furina-light}
+
+\newpage
+
+\themeshot{深色}{dark}
+\themeshot{宵宫主题配色-深色}{yoimiya-dark}
+\themeshot{芙宁娜主题配色-深色}{furina-dark}

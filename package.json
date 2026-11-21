@@ -1,6 +1,6 @@
 {
   "name": "fastlatexer",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A fast local LaTeX editor with live PDF preview",
   "main": "electron/main.js",
   "private": true,

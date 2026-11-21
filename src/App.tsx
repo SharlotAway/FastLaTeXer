@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent } from 'react';
+import appIcon from './assets/fastlatexer.png';
 import Toolbar from './components/Toolbar';
 import FileTree from './components/FileTree';
 import EditorPane, { type EditorHandle } from './components/EditorPane';
 import PreviewPane, { type PreviewHandle } from './components/PreviewPane';
 import ProblemsPanel from './components/ProblemsPanel';
-import type { CompileResult, Diagnostic, EntryKind, ImageSource, Language, OpenMode, Theme, TreeNode } from './types';
+import type { CompileResult, Diagnostic, EntryKind, ImageSource, Language, OpenMode, TreeNode } from './types';
 import { basename, projectRelativePath, resolveAgainst } from './path';
 import { LanguageContext, readPreference, useText } from './preferences';
+import { resolveTheme, type Theme } from '../@themes';
+import { applyMonacoTheme } from '../@themes/monaco';
 import monaco from './latex/monacoSetup';
 import { insertSource, formatSource } from './latex/editCommands';
-import { words } from './latex/documentTools';
+import { bibliographyKeys, bibliographyNames, forwardSyncTarget, labels, words } from './latex/documentTools';
 import { FileOutline, filesIn, GitHistory, Panel, ProjectSearch, Settings, WorkbenchMenus, type FormatAction, type InsertAction } from './components/Workbench';
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
@@ -97,7 +100,7 @@ export default function App() {
   const [language, setLanguage] = useState<Language>(() => readPreference('fastlatexer-language', 'zh', 'en'));
   const [theme, setTheme] = useState<Theme>(() => {
     const startupTheme = sessionStorage.getItem(themeKey) ? undefined : window.api.initialTheme;
-    return startupTheme ?? readPreference(themeKey, 'dark', 'light', 'yoimiya', 'furina');
+    return resolveTheme(startupTheme ?? localStorage.getItem(themeKey));
   });
   const t = useCallback((zh: string, en: string) => language === 'en' ? en : zh, [language]);
   const [root, setRoot] = useState<string | null>(null);
@@ -114,6 +117,9 @@ export default function App() {
   const [compiling, setCompiling] = useState(false);
   const [lastResult, setLastResult] = useState<CompileResult | null>(null);
   const [preview, setPreview] = useState<{ bytes: ArrayBuffer; pdfPath: string; mainFile: string } | null>(null);
+  const currentPreview = useRef(preview);
+  currentPreview.current = preview;
+  const forwardRequest = useRef(0);
   const [engine, setEngine] = useState('xelatex');
   const [autoCompile, setAutoCompile] = useState(true);
   const [leftWidth, setLeftWidth] = useState(260);
@@ -156,22 +162,17 @@ export default function App() {
     void window.api.setMenuLanguage?.(language);
   }, [language]);
   useLayoutEffect(() => {
-    document.documentElement.dataset.theme = theme;
+    const rootElement = document.documentElement;
+    rootElement.dataset.theme = theme;
+    applyMonacoTheme(monaco, theme, getComputedStyle(rootElement));
     sessionStorage.setItem(themeKey, theme);
     localStorage.setItem(themeKey, theme);
-    monaco.editor.setTheme('latex-' + theme);
-    const palette = getComputedStyle(document.documentElement);
-    void window.api.applyWindowTheme?.({
-      theme,
-      color: palette.getPropertyValue('--bg2').trim(),
-      symbolColor: palette.getPropertyValue('--fg').trim(),
-      background: palette.getPropertyValue('--bg').trim(),
-    }).catch(console.error);
+    void window.api.applyWindowTheme?.({ theme }).catch(console.error);
   }, [theme]);
   useEffect(() => {
     const sync = (event: StorageEvent) => {
       if (event.key === workspaceKey) setWorkspace(readWorkspace());
-      if (event.key === themeKey) setTheme(readPreference(themeKey, 'dark', 'light', 'yoimiya', 'furina'));
+      if (event.key === themeKey) setTheme(resolveTheme(localStorage.getItem(themeKey)));
     };
     window.addEventListener('storage', sync);
     return () => window.removeEventListener('storage', sync);
@@ -481,20 +482,34 @@ export default function App() {
     setDirty(true);
   }, []);
 
-  const doSync = useCallback(async () => {
+  const syncToPdf = useCallback(async (line: number, column: number) => {
     if (!preview) return;
-    const main = currentFileRef.current?.endsWith('.tex') ? currentFileRef.current : mainFile;
-    if (!main) return;
-    const pos = editorRef.current?.getPosition();
-    if (!pos) return;
-    const r = await window.api.synctexForward({
+    const file = currentFileRef.current;
+    if (!file || !/\.(?:tex|ltx)$/i.test(file)) return;
+    const request = ++forwardRequest.current;
+    const target = forwardSyncTarget(contentRef.current, line);
+    const result = await window.api.synctexForward({
       pdfPath: preview.pdfPath,
-      line: pos.line,
-      column: pos.column,
-      inputFile: main,
+      line: target.line,
+      column: target.line === line ? column : 0,
+      inputFile: file,
     });
-    if (r) previewRef.current?.jumpTo(r.page, r.x, r.y);
-  }, [preview, mainFile]);
+    if (!result || request !== forwardRequest.current || currentPreview.current !== preview || currentFileRef.current !== file) return;
+    if ((previewPaneRef.current?.clientWidth ?? 0) < 100) {
+      const left = leftPaneRef.current?.clientWidth ?? 0;
+      const editor = editorPaneRef.current?.clientWidth ?? 0;
+      const available = left + editor;
+      const width = Math.min(480, available / 2);
+      setLeftWidth(Math.min(left, Math.max(0, available - width)));
+      setRightWidth(width);
+    }
+    previewRef.current?.jumpTo(result.page, result.x, result.y, target.image);
+  }, [preview]);
+
+  const doSync = useCallback(() => {
+    const pos = editorRef.current?.getPosition();
+    if (pos) void syncToPdf(pos.line, pos.column).catch(reportError);
+  }, [reportError, syncToPdf]);
 
   const handlePdfDoubleClick = useCallback(
     async (page: number, x: number, y: number) => {
@@ -536,6 +551,40 @@ export default function App() {
   );
 
   const allFiles = useMemo(() => filesIn(tree), [tree]);
+  const [referenceSources, setReferenceSources] = useState<{ root: string | null; files: [string, string][] }>({ root: null, files: [] });
+  useEffect(() => {
+    let active = true;
+    void Promise.all(allFiles.filter((file) => /\.(?:tex|ltx|bib)$/i.test(file.path)).map(async (file) => {
+      try { return [file.path, await window.api.readFile(file.path)] as [string, string]; }
+      catch { return null; }
+    })).then((files) => {
+      if (active) setReferenceSources({ root, files: files.filter((file) => file !== null) });
+    });
+    return () => { active = false; };
+  }, [allFiles, root]);
+
+  const referenceKeys = useMemo(() => {
+    const files = new Map(referenceSources.root === root ? referenceSources.files : []);
+    if (currentFile) files.set(currentFile, content);
+    const citationFiles = new Set<string>();
+    const projectFile = root && root + '\\main.tex';
+    const normalize = (file: string) => file.replace(/\\/g, '/').toLowerCase();
+    const labelKeys = new Set<string>();
+    const citations = new Set<string>();
+    for (const [file, source] of files) {
+      if (!/\.(?:tex|ltx)$/i.test(file)) continue;
+      for (const label of labels(source)) labelKeys.add(label.text);
+      for (const name of bibliographyNames(source)) {
+        const bib = /\.bib$/i.test(name) ? name : name + '.bib';
+        citationFiles.add(normalize(resolveAgainst(file, bib)));
+        if (projectFile) citationFiles.add(normalize(resolveAgainst(projectFile, bib)));
+      }
+    }
+    for (const [file, source] of files) {
+      if (citationFiles.has(normalize(file))) for (const key of bibliographyKeys(source)) citations.add(key);
+    }
+    return { citations: [...citations].sort(), labels: [...labelKeys].sort() };
+  }, [content, currentFile, referenceSources, root]);
   const completionPaths = useMemo(() => {
     if (!root) return [];
     return allFiles.flatMap((file) => {
@@ -660,6 +709,8 @@ export default function App() {
   useEffect(() => window.api.onFileCommand?.((command) => {
     switch (command.type) {
       case 'open': setOpenChoice({}); break;
+      case 'openCurrent': void openProject(); break;
+      case 'openNew': void openProject(undefined, false, 'new'); break;
       case 'recent': setOpenChoice({ location: command.project }); break;
       case 'save': void saveCurrent().catch(reportError); break;
       case 'saveAs': void saveAs(); break;
@@ -790,7 +841,7 @@ export default function App() {
     <div className="app" onDragOverCapture={handleDragOver} onDropCapture={handleDrop} onDragLeave={(event) => {
       if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) setDropRow(null);
     }}>
-      <header className="window-titlebar">FastLaTeXer</header>
+      <header className="window-titlebar"><img src={appIcon} alt="" width="16" height="16" />FastLaTeXer</header>
       <Toolbar
         projectName={projectName}
         currentFile={currentFile}
@@ -800,7 +851,6 @@ export default function App() {
         lastResult={lastResult}
         autoCompile={autoCompile}
         onAutoCompileChange={setAutoCompile}
-        onOpenFolder={handleOpenFolder}
         onEditorMenuAction={(role) => {
           const focused = document.activeElement;
           if (focused?.matches('input, textarea, [contenteditable=true]') && !focused.closest('.monaco-editor')) return false;
@@ -861,8 +911,10 @@ export default function App() {
               filePath={currentFile}
               content={content}
               onChange={handleChange}
+              onDoubleClick={(line, column) => void syncToPdf(line, column).catch(reportError)}
               diagnostics={diagnostics}
               projectPaths={completionPaths}
+              referenceKeys={referenceKeys}
             />
           ) : (
             <Welcome recentProjects={recentProjects} onOpen={handleOpenFolder} onRecent={(project) => void openProject(project)} />

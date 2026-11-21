@@ -16,10 +16,11 @@ function latexSnip(latex: string): string {
   return latex.replace(/\\/g, '\\\\');
 }
 
-const projectPaths = new WeakMap<editor.ITextModel, readonly string[]>();
+export type ReferenceKeys = { citations: readonly string[]; labels: readonly string[] };
+const projectPaths = new WeakMap<editor.ITextModel, { paths: readonly string[]; references: ReferenceKeys }>();
 
-export function setProjectCompletionPaths(model: editor.ITextModel, paths: readonly string[]) {
-  projectPaths.set(model, paths);
+export function setProjectCompletionPaths(model: editor.ITextModel, paths: readonly string[], references: ReferenceKeys) {
+  projectPaths.set(model, { paths, references });
 }
 
 const ENVIRONMENTS = [
@@ -136,7 +137,7 @@ export function registerLatexCompletions(monaco: any) {
   }));
 
   monaco.languages.registerCompletionItemProvider('latex', {
-    triggerCharacters: ['\\', '{', '/'],
+    triggerCharacters: ['\\', '{', '/', ','],
     provideCompletionItems(model: any, position: any) {
       const textUntil = model.getValueInRange({
         startLineNumber: position.lineNumber,
@@ -145,6 +146,17 @@ export function registerLatexCompletions(monaco: any) {
         endColumn: position.column,
       });
 
+      const refMatch = textUntil.match(/\\((?:[a-z]*cite[a-z]*|(?:page|auto|eq|name)?ref|[cC]ref))\*?\s*(?:\[[^\]]*\]\s*){0,2}\{[^{}%]*?([^,\s{}%]*)$/i);
+      if (refMatch && !/(^|[^\\])(?:\\\\)*%/.test(textUntil)) {
+        const prefix = refMatch[2];
+        const references = projectPaths.get(model)?.references;
+        const keys = /cite/i.test(refMatch[1]) ? references?.citations : references?.labels;
+        const suffix = model.getLineContent(position.lineNumber).slice(position.column - 1).match(/^[^,\s{}%]*/)?.[0] ?? '';
+        const range = new monaco.Range(position.lineNumber, position.column - prefix.length,
+          position.lineNumber, position.column + suffix.length);
+        return { incomplete: true, suggestions: (keys ?? []).filter((key) => key.toLowerCase().startsWith(prefix.toLowerCase()))
+          .map((key) => ({ label: key, insertText: key, kind: CompletionKind.Reference, range })) };
+      }
       const fileMatch = textUntil.match(/\\(input|include)\s*\{[ \t]*([^{}%\\]*)$/);
       if (fileMatch && !/(^|[^\\])(?:\\\\)*%/.test(textUntil)) {
         const [, command, typed] = fileMatch;
@@ -153,7 +165,7 @@ export function registerLatexCompletions(monaco: any) {
         const suffix = rest.match(/^[^{}%]*?(?=[ \t]*\})/)?.[0] ?? '';
         const range = new monaco.Range(position.lineNumber, position.column - typed.length,
           position.lineNumber, position.column + suffix.length);
-        const paths = projectPaths.get(model) ?? [];
+        const paths = projectPaths.get(model)?.paths ?? [];
         const suggestions = paths.flatMap((path) => {
           if (command === 'include' && !/\.tex$/i.test(path)) return [];
           const label = command === 'include' ? path.slice(0, -4) : path;
