@@ -1,0 +1,15 @@
+node_modules/
+dist/
+release/
+.npm-cache/
+*.log
+.DS_Store
+.build/
+.latexbuild/
+/_mintest/
+/_electron-err.txt
+/_electron-out.txt
+
+# Local third-party examples pending redistribution review.
+/samples/acl-style-files-master/
+/samples/acl-style-files-master.zip

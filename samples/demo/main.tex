@@ -1,0 +1,33 @@
+\documentclass[11pt]{article}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\title{FastLaTeXer Demo}
+\author{Test Author}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section{Introduction}
+Hello, this is a \textbf{demo} document. Here is an inline equation $E = mc^2$ and a display equation:
+\begin{equation}
+  E = mc^2 \label{eq:einstein}
+\end{equation}
+We refer to the equation as Eq.~\ref{eq:einstein}.
+
+\section{Lists and Figures}
+\begin{itemize}
+  \item First item
+  \item Second item
+  \item Third item
+\end{itemize}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.35\textwidth]{image.png}
+  \caption{A test figure included via \texttt{\textbackslash includegraphics}.}
+  \label{fig:test}
+\end{figure}
+
+Figure~\ref{fig:test} shows an image. This reference \ref{eq:missing} is intentionally undefined to produce a warning.
+\end{document}

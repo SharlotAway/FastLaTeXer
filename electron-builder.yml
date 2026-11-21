@@ -1,0 +1,21 @@
+appId: com.fastlatexer.desktop
+productName: FastLaTeXer
+directories:
+  output: release
+files:
+  - dist/**
+  - electron/**
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  signAndEditExecutable: false
+  artifactName: FastLaTeXer-Setup-${version}-${arch}.${ext}
+nsis:
+  include: build/installer.nsh
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true

@@ -1,0 +1,35 @@
+{
+  "name": "fastlatexer",
+  "version": "0.1.0",
+  "description": "A fast local LaTeX editor with live PDF preview",
+  "main": "electron/main.js",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -k -s first \"npm:dev:vite\" \"npm:dev:electron\"",
+    "dev:vite": "vite",
+    "dev:electron": "wait-on tcp:127.0.0.1:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .",
+    "build": "vite build",
+    "package:win": "npm run build && node scripts/package-windows.js",
+    "start": "electron .",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "concurrently": "^10.0.7",
+    "cross-env": "^10.1.0",
+    "electron": "44.11.5",
+    "electron-builder": "26.18.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "wait-on": "^9.5.1"
+  },
+  "dependencies": {
+    "chokidar": "^3.6.0",
+    "monaco-editor": "^0.57.0",
+    "pdfjs-dist": "^6.5.438",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  }
+}
